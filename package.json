@@ -1,0 +1,19 @@
+{
+  "name": "@clawdreyhepburn/openclaw-ovid",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin for OVID agent identity",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@clawdreyhepburn/ovid": ">=0.2.0"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawdreyhepburn/openclaw-ovid.git"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
+  }
+}
