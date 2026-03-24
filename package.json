@@ -1,6 +1,6 @@
 {
   "name": "@clawdreyhepburn/openclaw-ovid",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OpenClaw plugin for OVID agent identity",
   "type": "module",
   "main": "src/index.ts",
@@ -15,5 +15,10 @@
   "devDependencies": {
     "@types/node": "^25.5.0",
     "typescript": "^6.0.2"
+  },
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ]
   }
 }
