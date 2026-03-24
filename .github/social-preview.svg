@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#0a0a0a"/>
+  <text x="640" y="260" text-anchor="middle" font-family="Georgia, serif" font-size="72" font-weight="bold" fill="#c4a87c">openclaw-ovid</text>
+  <text x="640" y="340" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="28" fill="#8a8078">OpenClaw plugin for OVID token management</text>
+  <text x="640" y="440" text-anchor="middle" font-size="64">🦞</text>
+  <line x1="440" y1="380" x2="840" y2="380" stroke="#2a2a2a" stroke-width="1"/>
+</svg>
