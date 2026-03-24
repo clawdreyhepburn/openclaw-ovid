@@ -103,6 +103,7 @@ export default function register(api: OpenClawPluginApi) {
     id: 'ovid',
     async start() {
       await loadOrGenerateKeypair(keyDir, logger);
+      logger.warn('OVID identity active but no mandate evaluation found. Install @clawdreyhepburn/openclaw-ovid-me for enforcement.');
     },
     stop() {},
   });
@@ -134,7 +135,7 @@ export default function register(api: OpenClawPluginApi) {
           const result = await createOvid({
             issuerKeys: keypair,
             agentId,
-            mandate: { rarFormat: 'cedar', policySet: params.mandate },
+            mandate: { type: 'agent_mandate', rarFormat: 'cedar', policySet: params.mandate },
             ttlSeconds: ttl,
           });
 
