@@ -2,6 +2,7 @@
  * OpenClaw OVID Plugin — Agent identity tools
  */
 
+import { exportJWK, importJWK } from 'jose';
 import {
   generateKeypair,
   exportPublicKeyBase64,
@@ -67,9 +68,9 @@ async function loadOrGenerateKeypair(keyDir: string, logger: OpenClawPluginApi['
   if (fs.existsSync(privPath) && fs.existsSync(pubPath)) {
     // Load existing keypair from JWK
     const jwk = JSON.parse(fs.readFileSync(privPath, 'utf-8'));
-    const privateKey = await crypto.subtle.importKey('jwk', jwk, { name: 'Ed25519' }, true, ['sign']) as unknown as CryptoKey;
+    const privateKey = await importJWK(jwk, 'EdDSA') as any;
     const { d: _, ...pubJwk } = jwk;
-    const publicKey = await crypto.subtle.importKey('jwk', pubJwk, { name: 'Ed25519' }, true, ['verify']) as unknown as CryptoKey;
+    const publicKey = await importJWK(pubJwk, 'EdDSA') as any;
     keypair = { privateKey, publicKey };
     publicKeyBase64 = fs.readFileSync(pubPath, 'utf-8').trim();
     logger.info(`OVID identity ready (key: ${fingerprint(publicKeyBase64)})`);
@@ -84,7 +85,7 @@ async function generateAndSave(dir: string, logger: OpenClawPluginApi['logger'])
   publicKeyBase64 = await exportPublicKeyBase64(keypair.publicKey);
 
   // Export private key as JWK for persistence
-  const jwk = await crypto.subtle.exportKey('jwk', keypair.privateKey);
+  const jwk = await exportJWK(keypair.privateKey);
   fs.writeFileSync(path.join(dir, 'orchestrator.jwk'), JSON.stringify(jwk, null, 2), { mode: 0o600 });
   fs.writeFileSync(path.join(dir, 'orchestrator.pub'), publicKeyBase64 + '\n', { mode: 0o644 });
 
