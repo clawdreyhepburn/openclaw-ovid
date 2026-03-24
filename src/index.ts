@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 
-export const id = 'ovid';
+export const id = 'openclaw-ovid';
 export const name = 'OVID';
 
 interface PluginConfig {
