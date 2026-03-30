@@ -24,6 +24,10 @@ interface PluginConfig {
   defaultTtl?: number;
   maxTtl?: number;
   maxChainDepth?: number;
+  /** Auto-mint OVID tokens for spawned sub-agents (default: true) */
+  autoMint?: boolean;
+  /** Default Cedar mandate for auto-minted tokens */
+  defaultMandate?: string;
 }
 
 interface OpenClawPluginApi {
@@ -45,6 +49,7 @@ interface OpenClawPluginApi {
     opts?: { optional?: boolean },
   ): void;
   registerCli?(fn: (ctx: { program: any }) => void, opts?: { commands: string[] }): void;
+  on?(hookName: string, handler: (...args: any[]) => any, opts?: { name?: string; description?: string }): void;
 }
 
 function resolveKeyDir(keyDir: string): string {
@@ -100,14 +105,77 @@ export default function register(api: OpenClawPluginApi) {
   const maxChainDepth = config.maxChainDepth ?? 5;
   const logger = api.logger;
 
+  const autoMint = config.autoMint !== false; // default: true
+  const defaultMandate = config.defaultMandate ?? `permit(
+  principal,
+  action in [Ovid::Action::"read", Ovid::Action::"search", Ovid::Action::"summarize"],
+  resource
+);`;
+
   api.registerService({
     id: 'ovid',
     async start() {
       await loadOrGenerateKeypair(keyDir, logger);
+      if (autoMint) {
+        logger.info('OVID auto-mint enabled — sub-agents will receive identity tokens on spawn');
+      }
       logger.warn('OVID identity active but no mandate evaluation found. Install @clawdreyhepburn/openclaw-ovid-me for enforcement.');
     },
     stop() {},
   });
+
+  // --- Auto-mint OVID tokens for spawned sub-agents ---
+  if (autoMint && api.on) {
+    api.on("before_tool_call", async (event: any) => {
+      const toolName: string = event.toolName ?? event.tool ?? event.name ?? "";
+      if (toolName !== "sessions_spawn") return {};
+
+      if (!keypair) {
+        logger.warn("[OVID] Cannot auto-mint: keypair not loaded");
+        return {};
+      }
+
+      const params = event.params ?? {};
+      const task: string = (params.task as string) ?? "";
+      const label: string = (params.label as string) ?? "";
+      const agentId = label || `subagent-${crypto.randomUUID().slice(0, 8)}`;
+
+      try {
+        const ttl = Math.min(defaultTtl, maxTtl);
+        const result = await createOvid({
+          issuerKeys: keypair,
+          agentId,
+          mandate: { rarFormat: 'cedar', policySet: defaultMandate } as any,
+          ttlSeconds: ttl,
+        });
+
+        mintCount++;
+
+        const ovidBlock = [
+          `[OVID_IDENTITY]`,
+          `You have been issued a cryptographic identity token (OVID).`,
+          `Your agent ID: ${agentId}`,
+          `Your mandate (Cedar policy) defines what you are authorized to do.`,
+          `Token (JWT): ${result.jwt}`,
+          `Issuer public key: ${publicKeyBase64}`,
+          `Expires in: ${ttl}s`,
+          `[/OVID_IDENTITY]`,
+        ].join('\n');
+
+        const newTask = `${ovidBlock}\n\n${task}`;
+        logger.info(`[OVID] Auto-minted token for sub-agent "${agentId}" (ttl=${ttl}s)`);
+
+        return { params: { ...params, task: newTask } };
+      } catch (err: any) {
+        logger.error(`[OVID] Auto-mint failed: ${err.message}`);
+        return {}; // Don't block the spawn
+      }
+    }, {
+      name: "ovid.auto-mint-spawn",
+      description: "Auto-mint OVID identity tokens for spawned sub-agents",
+    });
+    logger.info("Registered before_tool_call hook for OVID auto-mint on sessions_spawn");
+  }
 
   // --- Tool: ovid_mint ---
   api.registerTool(
@@ -136,7 +204,7 @@ export default function register(api: OpenClawPluginApi) {
           const result = await createOvid({
             issuerKeys: keypair,
             agentId,
-            mandate: { type: 'agent_mandate', rarFormat: 'cedar', policySet: params.mandate },
+            mandate: { rarFormat: 'cedar', policySet: params.mandate } as any,
             ttlSeconds: ttl,
           });
 
