@@ -145,7 +145,7 @@ export default function register(api: OpenClawPluginApi) {
         const result = await createOvid({
           issuerKeys: keypair,
           agentId,
-          mandate: { rarFormat: 'cedar', policySet: defaultMandate } as any,
+          mandate: { type: 'agent_mandate', rarFormat: 'cedar', policySet: defaultMandate },
           ttlSeconds: ttl,
         });
 
@@ -167,7 +167,7 @@ export default function register(api: OpenClawPluginApi) {
 
         return { params: { ...params, task: newTask } };
       } catch (err: any) {
-        logger.error(`[OVID] Auto-mint failed: ${err.message}`);
+        logger.error(`[OVID] Auto-mint failed: ${err.message}\n${err.stack}`);
         return {}; // Don't block the spawn
       }
     }, {
