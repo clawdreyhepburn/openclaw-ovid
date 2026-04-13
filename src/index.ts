@@ -19,6 +19,13 @@ import * as crypto from 'node:crypto';
 export const id = 'openclaw-ovid';
 export const name = 'OVID';
 
+interface MandateProfile {
+  /** Cedar policy text for this profile */
+  policySet: string;
+  /** Optional TTL override in seconds */
+  ttl?: number;
+}
+
 interface PluginConfig {
   keyDir?: string;
   defaultTtl?: number;
@@ -28,6 +35,8 @@ interface PluginConfig {
   autoMint?: boolean;
   /** Default Cedar mandate for auto-minted tokens */
   defaultMandate?: string;
+  /** Named mandate profiles for per-task authorization */
+  mandateProfiles?: Record<string, MandateProfile>;
 }
 
 interface OpenClawPluginApi {
@@ -112,6 +121,32 @@ export default function register(api: OpenClawPluginApi) {
   resource
 );`;
 
+  // Built-in mandate profiles (can be overridden/extended via config)
+  const builtinProfiles: Record<string, MandateProfile> = {
+    reader: {
+      policySet: `permit(
+  principal,
+  action in [Ovid::Action::"read", Ovid::Action::"search", Ovid::Action::"summarize"],
+  resource
+);`,
+    },
+    publisher: {
+      policySet: `permit(
+  principal,
+  action in [Ovid::Action::"read", Ovid::Action::"search", Ovid::Action::"summarize", Ovid::Action::"write", Ovid::Action::"execute"],
+  resource
+);`,
+    },
+    developer: {
+      policySet: `permit(
+  principal,
+  action in [Ovid::Action::"read", Ovid::Action::"search", Ovid::Action::"summarize", Ovid::Action::"write", Ovid::Action::"execute", Ovid::Action::"create"],
+  resource
+);`,
+    },
+  };
+  const mandateProfiles: Record<string, MandateProfile> = { ...builtinProfiles, ...(config.mandateProfiles ?? {}) };
+
   api.registerService({
     id: 'ovid',
     async start() {
@@ -140,12 +175,31 @@ export default function register(api: OpenClawPluginApi) {
       const label: string = (params.label as string) ?? "";
       const agentId = label || `subagent-${crypto.randomUUID().slice(0, 8)}`;
 
+      // Check for [OVID_MANDATE:profile] tag in task text
+      let selectedMandate = defaultMandate;
+      let selectedTtl = defaultTtl;
+      let cleanTask = task;
+      const mandateMatch = task.match(/\[OVID_MANDATE:([\w-]+)\]/);
+      if (mandateMatch) {
+        const profileName = mandateMatch[1];
+        const profile = mandateProfiles[profileName];
+        if (profile) {
+          selectedMandate = profile.policySet;
+          if (profile.ttl) selectedTtl = profile.ttl;
+          logger.info(`[OVID] Using mandate profile "${profileName}" for sub-agent "${agentId}"`);
+        } else {
+          logger.warn(`[OVID] Unknown mandate profile "${profileName}" — falling back to default`);
+        }
+        // Strip the tag from the task so the sub-agent doesn't see it
+        cleanTask = task.replace(/\[OVID_MANDATE:[\w-]+\]\s*/, '');
+      }
+
       try {
-        const ttl = Math.min(defaultTtl, maxTtl);
+        const ttl = Math.min(selectedTtl, maxTtl);
         const result = await createOvid({
           issuerKeys: keypair,
           agentId,
-          mandate: { type: 'agent_mandate', rarFormat: 'cedar', policySet: defaultMandate },
+          mandate: { type: 'agent_mandate', rarFormat: 'cedar', policySet: selectedMandate } as any,
           ttlSeconds: ttl,
         });
 
@@ -162,7 +216,7 @@ export default function register(api: OpenClawPluginApi) {
           `[/OVID_IDENTITY]`,
         ].join('\n');
 
-        const newTask = `${ovidBlock}\n\n${task}`;
+        const newTask = `${ovidBlock}\n\n${cleanTask}`;
         logger.info(`[OVID] Auto-minted token for sub-agent "${agentId}" (ttl=${ttl}s)`);
 
         return { params: { ...params, task: newTask } };
